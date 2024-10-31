@@ -1,0 +1,177 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+    provider      = "prisma-client-js"
+    binaryTargets = ["native", "darwin-arm64", "linux-musl", "linux-arm64-openssl-1.1.x", "debian-openssl-1.1.x"]
+}
+
+generator zod {
+    provider                  = "npx zod-prisma-types"
+    useMultipleFiles          = false // default is false
+    createModelTypes          = true // default is true
+    addIncludeType            = true // default is true
+    createRelationValuesTypes = true // default is false
+    createPartialTypes        = false // default is false
+    writeNullishInModelTypes  = true // default is false
+}
+
+datasource db {
+    provider = "postgresql"
+    // NOTE: When using postgresql, mysql or sqlserver, uncomment the @db.Text annotations in model account below
+    // Further reading:
+    // https://next-auth.js.org/adapters/prisma#create-the-prisma-schema
+    // https://www.prisma.io/docs/reference/api-reference/prisma-schema-reference#string
+    url      = env("DATABASE_URL")
+}
+
+enum Sex {
+    M
+    F
+}
+
+enum Role {
+    therapist
+    patient
+}
+
+model Account {
+    id                 String  @id @default(uuid())
+    type               String  @db.Text
+    provider           String
+    providerAccountId  String  @unique
+    refresh_token      String? @db.Text
+    access_token       String? @db.Text
+    expires_at         Int?
+    refresh_expires_in Int?
+    not_before_policy  Int?
+    token_type         String? @db.Text
+    scope              String? @db.Text
+    id_token           String? @db.Text
+    session_state      String? @db.Text
+    user               User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+    userId             String
+
+    @@unique([providerAccountId, userId])
+}
+
+model Session {
+    id           String   @id @default(uuid())
+    sessionToken String   @unique @map("session_token")
+    expires      DateTime
+    user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+    userId       String
+
+    @@map("sessions")
+}
+
+model User {
+    id            String     @id @default(uuid())
+    username      String?    @unique
+    name          String?    @db.Text
+    email         String     @unique
+    emailVerified DateTime?
+    image         String?    @db.Text
+    roles         String[]   @default([])
+    phone         String?    @db.Text
+    address       String?    @db.Text
+    accounts      Account[]
+    therapist     Therapist?
+    patient       Patient?
+    session       Session[]
+    group         String[]
+}
+
+model Therapist {
+    id       String    @id @default(uuid())
+    tagsIds  Int[]
+    tags     Tag[]
+    patients Patient[]
+    notes    Note[]
+    user     User?     @relation(fields: [id], references: [id], onDelete: Cascade, onUpdate: Cascade)
+}
+
+model Patient {
+    id            String         @id @default(uuid())
+    medicalRecord MedicalRecord?
+    tagsIds       Int[]
+    tags          Tag[]
+    therapistId   String?
+    therapist     Therapist?     @relation(fields: [therapistId], references: [id])
+    notes         Note[]
+    user          User?          @relation(fields: [id], references: [id], onDelete: Cascade, onUpdate: Cascade)
+}
+
+model AnamnesticData {
+    id                    String        @id @default(uuid())
+    age                   Int
+    sex                   Sex
+    pronoun               String
+    schooling             String
+    birthPlace            String
+    previousInterventions String
+    reason                String
+    medicalRecord         MedicalRecord @relation(fields: [medicalRecordId], references: [id])
+    medicalRecordId       String        @unique
+}
+
+model ClinicalData {
+    id                   String        @id @default(uuid())
+    diagnosticHypothesis String
+    simptoms             String
+    medicalRecord        MedicalRecord @relation(fields: [medicalRecordId], references: [id])
+    medicalRecordId      String        @unique
+}
+
+model Intervention {
+    id               String        @id @default(uuid())
+    goals            String
+    therapeuticPlan  String
+    frequency        String
+    takingChargeDate DateTime      @default(now())
+    medicalRecord    MedicalRecord @relation(fields: [medicalRecordId], references: [id])
+    medicalRecordId  String        @unique
+}
+
+model MedicalRecord {
+    id              String           @id @default(uuid())
+    patientId       String           @unique
+    patient         Patient?         @relation(fields: [patientId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+    anamnesticData  AnamnesticData?
+    clinicalData    ClinicalData?
+    intervention    Intervention?
+    administrations Administration[]
+    ongoing         Boolean
+}
+
+model Tag {
+    id          String     @id @default(uuid())
+    name        String
+    patientIds  String[]
+    patients    Patient[]
+    therapistId String
+    therapist   Therapist? @relation(fields: [therapistId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+}
+
+model Note {
+    id          String    @id @default(uuid())
+    date        DateTime  @default(now())
+    pinned      Boolean   @default(false)
+    title       String
+    content     String
+    therapistId String
+    therapist   Therapist @relation(fields: [therapistId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+    patientId   String
+    patient     Patient   @relation(fields: [patientId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+}
+
+model Administration {
+    id              String        @id @default(uuid())
+    T               Int?
+    patientId       String
+    date            DateTime      @default(now())
+    type            String
+    records         Json
+    medicalRecordId String
+    medicalRecord   MedicalRecord @relation(fields: [medicalRecordId], references: [id], onDelete: Cascade, onUpdate: Restrict)
+}
